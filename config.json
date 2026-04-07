@@ -1,0 +1,14 @@
+{
+  "hash_algorithm": "sha1",
+  "chain_length": 1000,
+  "qubit_count": 4,
+  "bucket_size_threshold": 10000,
+  "max_qubits": 20,
+  "simulation_shots": 1024,
+  "input_wordset_path": "PCFG/wordset_output/wordset_len8.txt",
+  "output_directory": "rainbow_tables/output",
+  "checkpoint_interval": 100000,
+  "flush_interval": 1000,
+  "log_level": "INFO",
+  "max_retries": 3
+}
