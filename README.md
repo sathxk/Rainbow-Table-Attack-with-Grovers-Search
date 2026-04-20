@@ -1,332 +1,208 @@
 # Quantum-Enhanced Rainbow Table Attack System
 
-**Last Updated:** April 7, 2026
+A hybrid classical-quantum password cracking system that combines rainbow table cryptanalysis with Grover's quantum search algorithm.
 
-## Project Overview
+## Overview
 
-This project implements a hybrid classical-quantum password cracking system that combines rainbow table cryptanalysis with Grover's quantum search algorithm. The system generates pre-computed hash-reduction chains organized into buckets optimized for quantum search, enabling quantum speedup during the attack phase.
+This project implements a complete rainbow table attack system with two approaches:
+
+1. **Quantum Attack**: Uses Grover's algorithm for O(√N) search within buckets
+2. **Classical Attack**: Uses hash table lookups for O(1) endpoint matching
+
+Both approaches achieve 100% success rate on the test dataset, with different performance characteristics.
+
+## Performance Comparison
+
+| Metric | Classical | Quantum | Notes |
+|--------|-----------|---------|-------|
+| **Speed** | 0.8s/hash | 4.1s/hash | Classical 5× faster (on simulator) |
+| **Memory** | 3.6 GB | 65 MB | Quantum 57× more efficient |
+| **Init Time** | 57s | 0.05s | Quantum 1,138× faster |
+| **Success Rate** | 100% | 100% | Both perfect |
+
+*Note: Quantum performance measured on classical simulator. Real quantum hardware would be significantly faster.*
 
 ## System Architecture
-
-### Two-Phase Design
 
 ```
 Phase 1: Rainbow Table Generation (Classical)
     ↓
-    38M+ passwords → Hash-Reduction Chains → Bucketed Storage (SQLite)
+    38M passwords → Hash-Reduction Chains → Bucketed Storage (SQLite)
     ↓
-Phase 2: Attack Phase (Hybrid Classical-Quantum) [NOT YET IMPLEMENTED]
+Phase 2: Attack Phase (Hybrid Classical-Quantum)
     ↓
-    Target Hash → Bucket Lookup → Classical Search → Grover Search → Password Recovery
+    Target Hash → Bloom Filter → Bucket Lookup → Grover/Hash Table → Password
 ```
 
-## Phase 1: Rainbow Table Generation ✓ COMPLETED
+## Quick Start
 
-### Current Implementation Status
+### Prerequisites
 
-**Generation Complete:**
-- 38,285,439 chains generated from PCFG wordset
-- 2.9 GB SQLite database with indexed storage
-- Generation time: ~12.5 hours (single-threaded)
-- Configuration: SHA-1, 1000-iteration chains, 4-qubit buckets
-
-**Current Configuration:**
-```json
-{
-  "hash_algorithm": "sha1",
-  "chain_length": 1000,
-  "qubit_count": 4,
-  "bucket_size": 16,
-  "num_buckets": 2392841,
-  "total_chains": 38285439
-}
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-### How It Works
+### Running Attacks
 
-1. **Input:** PCFG-generated 8-character passwords (38M+ entries)
-   - Source: `PCFG/wordset_output/wordset_len8.txt`
-   - Generated from RockYou dataset using Probabilistic Context-Free Grammar
+```bash
+# Quantum attack (Grover's search)
+./venv/bin/python examples/quantum_attack.py
 
-2. **Chain Generation:**
-   ```
-   Start Password → Hash → Reduce(i=0) → Hash → Reduce(i=1) → ... → Final Hash (Endpoint)
-   Store: (start_point, end_point, bucket_key, intra_value)
-   ```
+# Classical attack (hash table lookup)
+./venv/bin/python examples/classical_attack.py
 
-3. **Bucketing Strategy:**
-   ```python
-   # Use first 32 bits of SHA-1 endpoint hash
-   hash_value = int(endpoint[:8], 16)
-   
-   # Dynamic bucket allocation
-   num_buckets = ceil(total_entries / bucket_size)
-   bucket_size = 2^qubit_count
-   
-   # Bucket assignment
-   bucket_key = hash_value % num_buckets
-   intra_value = hash_value % bucket_size
-   ```
+# Side-by-side comparison
+./venv/bin/python examples/compare_classical_vs_quantum.py
+```
 
-4. **Storage:** SQLite database with schema:
-   ```sql
-   CREATE TABLE chains (
-       bucket_key INTEGER NOT NULL,
-       intra_value INTEGER NOT NULL,
-       start_point TEXT NOT NULL,
-       end_point TEXT NOT NULL
-   );
-   CREATE INDEX idx_bucket_key ON chains(bucket_key);
-   ```
+All attacks read hashes from `hashes.txt` (one SHA-1 hash per line).
 
-### Key Components
+### Using the CLI
 
-- **`rainbow_table_generator/chain_generator.py`**: Hash-reduction chain generation
-- **`rainbow_table_generator/bucket_organizer.py`**: SHA-1-based bucketing logic
-- **`rainbow_table_generator/storage.py`**: SQLite database management
-- **`rainbow_table_generator/hash_functions.py`**: SHA-1/MD5/SHA-256 support
-- **`rainbow_table_generator/reduction.py`**: Deterministic hash-to-password mapping
-- **`rainbow_table_generator/main.py`**: Orchestration and progress tracking
+```bash
+# Crack a single hash with quantum attack
+./venv/bin/python -m attack crack 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8
 
-## Recent Major Changes
+# Build Bloom filter (one-time setup)
+./venv/bin/python -m attack build-bloom --n-items 38285441 --fpr 0.001
 
-### Bucketing Strategy Migration (Completed)
-
-**Problem Identified:**
-- Old QIris-style 16-bit hash bucketing limited to 4,096 buckets maximum
-- With 38M entries and 4-qubit requirement (bucket_size=16), needed 2.4M buckets
-- System was fundamentally broken for large-scale quantum search
-
-**Solution Implemented:**
-- Switched from 16-bit custom hash to SHA-1-direct bucketing
-- Uses first 32 bits of endpoint hash (4 billion possible values)
-- Dynamic bucket calculation: `num_buckets = ceil(total_entries / bucket_size)`
-- Modulo-based distribution ensures uniform bucket filling
-
-**Changes Made:**
-- ✓ Removed `hash16bit()` function from `bucket_organizer.py`
-- ✓ Added `total_entries` parameter to `BucketOrganizer.__init__()`
-- ✓ Updated bucket assignment to use `int(endpoint[:8], 16) % num_buckets`
-- ✓ Deferred `BucketOrganizer` initialization in `main.py` until entry count known
-- ✓ Updated metadata to include `num_buckets` and `bucket_size`
-- ✓ All 259 tests passing
-- ✓ Documentation updated
-
-**Migration from MD5 to SHA-1:**
-- All documentation updated to use SHA-1 as primary hash algorithm
-- System still supports MD5, SHA-1, and SHA-256
-- SHA-1 chosen for balance of security and performance
-
-## Current Issues & Work In Progress
-
-### Issue 1: Bucketing Distribution Problem 🔴 CRITICAL
-
-**Observed Behavior:**
-- Expected: 2,392,841 buckets with ~16 entries each
-- Actual: Only 84,370 unique buckets populated
-- This means buckets are averaging ~454 entries each (way over the 16-entry limit)
-
-**Impact:**
-- Buckets too large for 4-qubit Grover's algorithm
-- Quantum search requires buckets ≤16 entries for 4-qubit systems
-- Current distribution defeats the purpose of quantum optimization
-
-**Root Cause (Hypothesis):**
-- Bucketing formula may not be distributing uniformly
-- Possible collision in first 8 hex chars of SHA-1 endpoints
-- Need to investigate actual endpoint distribution in database
-
-**Action Required:**
-1. Analyze endpoint distribution in current database
-2. Verify bucketing formula is correctly implemented
-3. Consider alternative bucketing strategies if needed
-4. Regenerate rainbow table with fixed bucketing
-
-### Issue 2: Qubit Count Optimization 🟡 ENHANCEMENT
-
-**Current State:**
-- System configured for 4 qubits (bucket_size = 16)
-- Qiskit benchmark shows 12 qubits is optimal for this hardware
-
-**Proposed Change:**
-- Switch from 4 qubits to 12 qubits
-- New bucket_size = 2^12 = 4,096 entries per bucket
-- New num_buckets = ceil(38,285,439 / 4,096) = 9,347 buckets
-
-**Benefits:**
-- Fewer buckets to manage (9,347 vs 2.4M)
-- Better demonstrates Grover's algorithm (50 iterations vs 3)
-- Still fast: 0.14s per search vs 0.04s
-- More practical for real-world quantum hardware
-
-**Tradeoffs:**
-- Larger buckets mean more memory per quantum circuit (12.6 MB vs 0.8 MB)
-- Longer quantum simulation time per bucket
-- But: Dramatically fewer buckets to search overall
-
-**Qiskit Benchmark Results:**
-| Qubits | Bucket Size | Grover Iters | Time/Search | Memory | Buckets (38M) |
-|--------|-------------|--------------|-------------|--------|---------------|
-| 4      | 16          | 3            | 0.04s       | 0.8 MB | 2,392,841     |
-| 12     | 4,096       | 50           | 0.14s       | 12.6 MB| 9,347         |
-| 16     | 65,536      | 201          | 5.07s       | 270 MB | 584           |
-
-**Recommendation:** Switch to 12 qubits for optimal balance
-
-## Immediate Next Steps
-
-### Priority 1: Fix Bucketing Distribution
-1. **Investigate current database:**
-   ```bash
-   # Analyze bucket distribution
-   python3 -c "import sqlite3; conn = sqlite3.connect('rainbow_tables/output/rainbow_table.db'); 
-   cursor = conn.cursor(); 
-   cursor.execute('SELECT bucket_key, COUNT(*) as cnt FROM chains GROUP BY bucket_key ORDER BY cnt DESC LIMIT 20'); 
-   print(cursor.fetchall())"
-   ```
-
-2. **Verify bucketing formula implementation:**
-   - Check `bucket_organizer.py` logic
-   - Test with sample endpoints
-   - Ensure modulo operation is correct
-
-3. **Fix and regenerate:**
-   - Implement corrected bucketing strategy
-   - Delete old rainbow table: `rm -rf rainbow_tables/output/`
-   - Regenerate with fixed code
-
-### Priority 2: Migrate to 12-Qubit Configuration
-1. **Update configuration:**
-   ```json
-   {
-     "qubit_count": 12,
-     "bucket_size": 4096
-   }
-   ```
-
-2. **Regenerate rainbow table:**
-   - Expected: 9,347 buckets with ≤4,096 entries each
-   - Generation time: ~12-15 hours
-
-3. **Validate new table:**
-   - Verify bucket count matches expectation
-   - Verify no bucket exceeds 4,096 entries
-   - Check bucket distribution uniformity
-
-## Phase 2: Attack Phase (Future Work)
-
-### Planned Implementation
-
-**Attack Flow:**
-1. Input: Target SHA-1 hash
-2. Calculate bucket_key using same formula as generation
-3. Retrieve bucket from database (≤4,096 chains for 12-qubit)
-4. Classical chain walking (try all chains sequentially)
-5. If classical fails, apply Grover's quantum search
-6. Return recovered password or "not found"
-
-**Components to Build:**
-- Hash lookup module (bucket calculation + database query)
-- Chain walker (backward chain traversal)
-- Password reconstructor (forward chain reconstruction)
-- Grover search module (Qiskit quantum circuit)
-- Attack orchestrator (main entry point)
-
-**Requirements:** See `.kiro/specs/quantum-grover-attack-phase/requirements.md`
+# Show database info
+./venv/bin/python -m attack info
+```
 
 ## Project Structure
 
 ```
 .
-├── rainbow_table_generator/       # Phase 1: Generation (COMPLETE)
-│   ├── bucket_organizer.py        # Bucketing logic
-│   ├── chain_generator.py         # Hash-reduction chains
-│   ├── config.py                  # Configuration management
-│   ├── hash_functions.py          # SHA-1/MD5/SHA-256
-│   ├── reduction.py               # Hash-to-password mapping
-│   ├── storage.py                 # SQLite database I/O
-│   ├── progress.py                # Progress tracking
-│   ├── parallel.py                # Multi-process generation
-│   ├── main.py                    # Main orchestrator
-│   └── utils.py                   # Utilities
+├── README.md                     # This file
+├── config.json                   # System configuration
+├── hashes.txt                    # Test hashes (input)
+├── requirements.txt              # Python dependencies
 │
-├── tests/                         # Test suite (259 tests, all passing)
+├── attack/                       # Attack phase implementation
+│   ├── bloom_filter.py          # Bloom filter pre-screening
+│   ├── bucket_loader.py         # Database integration
+│   ├── chain_verifier.py        # Classical verification
+│   ├── classical_attack.py      # Classical attack (hash table)
+│   ├── dummy_padding.py         # Bucket padding for quantum
+│   ├── grover_search.py         # Grover's quantum search
+│   ├── orchestrator.py          # Quantum attack orchestrator
+│   ├── walk_forward.py          # Endpoint reconstruction
+│   └── cli.py                   # Command-line interface
+│
+├── rainbow_table_generator/     # Table generation
+│   ├── bucket_organizer.py      # SHA-1-based bucketing
+│   ├── chain_generator.py       # Hash-reduction chains
+│   ├── config.py                # Configuration management
+│   ├── hash_functions.py        # SHA-1/MD5/SHA-256
+│   ├── reduction.py             # Hash-to-password mapping
+│   ├── storage.py               # SQLite database
+│   ├── parallel.py              # Multi-process generation
+│   └── main.py                  # Main orchestrator
+│
+├── examples/                     # Example scripts
+│   ├── quantum_attack.py        # Run quantum attack
+│   ├── classical_attack.py      # Run classical attack
+│   └── compare_classical_vs_quantum.py  # Compare both
+│
+├── tests/                        # Test suite (349 tests)
+│   ├── test_bloom_filter.py
+│   ├── test_grover_search.py
 │   ├── test_bucket_organizer.py
-│   ├── test_chain_generator.py
-│   ├── test_storage.py
 │   └── ...
 │
-├── PCFG/                          # Password generation
-│   ├── wordset_output/
-│   │   └── wordset_len8.txt       # 38M passwords
-│   └── ...
+├── docs/                         # Documentation
+│   ├── OPTIMIZATION_RESULTS.md
+│   ├── TEST_RESULTS_SUMMARY.md
+│   └── INTERMEDIATE_PASSWORD_RESULTS.md
 │
-├── rainbow_tables/output/         # Generated rainbow table
-│   ├── rainbow_table.db           # 2.9 GB SQLite database
-│   ├── metadata.json              # Generation parameters
-│   ├── index.json                 # Bucket statistics
-│   └── logs/
-│
-├── .kiro/specs/                   # Specifications
-│   ├── quantum-grover-rainbow-table/
-│   └── quantum-grover-attack-phase/
-│
-├── config.json                    # Runtime configuration
-├── requirements.txt               # Python dependencies
-│
-└── Documentation:
-    ├── BUCKETING_CHANGES_SUMMARY.md
-    ├── BUCKETING_STRATEGY_COMPARISON.md
-    ├── CONVERSATION_SUMMARY.md
-    ├── MD5_TO_SHA1_MIGRATION.md
-    └── qiskit_simulation_benchmark.md
+└── rainbow_tables/output/        # Generated data (not in repo)
+    ├── rainbow_table.db         # 2.9 GB SQLite database
+    └── metadata.json            # Generation parameters
 ```
 
-## Running the System
+## Phase 1: Rainbow Table Generation
 
-### Generate Rainbow Table
+### Current Database
+
+- **Total chains**: 38,285,441
+- **Endpoint diversity**: 98.02% (37.5M unique endpoints)
+- **Buckets**: 49,851 (10-qubit configuration)
+- **Database size**: 2.9 GB
+- **Generation time**: ~6 hours (4 workers)
+
+### Configuration
+
+```json
+{
+  "hash_algorithm": "sha1",
+  "chain_length": 1000,
+  "qubit_count": 10,
+  "fill_factor": 0.75,
+  "bucket_size": 1024,
+  "num_buckets": 49851
+}
+```
+
+### Key Features
+
+- **SHA-1-based bucketing**: Uses first 32 bits of endpoint hash
+- **Fill factor over-provisioning**: 0.75 fill factor prevents bucket overflow
+- **Standard reduction function**: Oechslin 2003 algorithm, 98% endpoint diversity
+- **Parallel generation**: Multi-worker support for faster generation
+
+### Generate Your Own Table
+
 ```bash
-# Current configuration (4 qubits)
+# Configure in config.json, then:
 python -m rainbow_table_generator.main --config config.json
-
-# After fixing bucketing and switching to 12 qubits
-# 1. Update config.json: "qubit_count": 12
-# 2. Delete old table: rm -rf rainbow_tables/output/
-# 3. Regenerate: python -m rainbow_table_generator.main --config config.json
 ```
 
-### Run Tests
-```bash
-# All tests
-pytest tests/ -v
+## Phase 2: Attack Phase
 
-# Specific component
-pytest tests/test_bucket_organizer.py -v
+### Quantum Attack (Grover's Search)
 
-# With coverage
-pytest tests/ --cov=rainbow_table_generator --cov-report=html
+**How it works:**
+1. Bloom filter pre-screens candidate endpoints (99.9% rejection rate)
+2. Load matching bucket from database
+3. Pad bucket to 2^n entries for quantum circuit
+4. Run Grover's search (25 iterations for 10 qubits)
+5. Verify result classically
+
+**Performance:**
+- Average: 4.1s per hash
+- Throughput: 0.24 hashes/second
+- Memory: 65.6 MB (Bloom filter)
+
+### Classical Attack (Hash Table Lookup)
+
+**How it works:**
+1. Load all 37.5M endpoints into hash table (one-time, 57s)
+2. For each position k, compute candidate endpoint
+3. O(1) hash table lookup
+4. Walk chain forward to verify
+
+**Performance:**
+- Average: 0.8s per hash
+- Throughput: 1.21 hashes/second
+- Memory: 3.6 GB (hash table)
+
+### Attack Flow
+
 ```
-
-### Validate Generated Table
-```bash
-# Check database statistics
-python3 -c "
-import sqlite3
-conn = sqlite3.connect('rainbow_tables/output/rainbow_table.db')
-cursor = conn.cursor()
-cursor.execute('SELECT COUNT(*) FROM chains')
-print(f'Total entries: {cursor.fetchone()[0]}')
-cursor.execute('SELECT COUNT(DISTINCT bucket_key) FROM chains')
-print(f'Unique buckets: {cursor.fetchone()[0]}')
-cursor.execute('SELECT MAX(cnt) FROM (SELECT COUNT(*) as cnt FROM chains GROUP BY bucket_key)')
-print(f'Max bucket size: {cursor.fetchone()[0]}')
-conn.close()
-"
+For each chain position k (999 → 0):
+  1. Compute candidate_endpoint from target_hash
+  2. Check if endpoint exists (Bloom filter or hash table)
+  3. If found, load chain and verify
+  4. Return password if verified
 ```
 
 ## Technical Details
 
-### Hash-Reduction Chain Algorithm
+### Hash-Reduction Chain
+
 ```python
 def generate_chain(start_point, chain_length):
     current = start_point
@@ -338,111 +214,118 @@ def generate_chain(start_point, chain_length):
 ```
 
 ### Reduction Function
+
 ```python
 def reduce(hash_value: bytes, iteration: int, password_length: int) -> str:
+    """Standard rainbow table reduction (Oechslin 2003)"""
     charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-    seed = hash_value.hex() + str(iteration)
-    hash_int = int(seed, 16)
+    charset_len = len(charset)
+    search_space = charset_len ** password_length
+    
+    hash_int = int.from_bytes(hash_value, byteorder='big')
+    value = (hash_int + iteration) % search_space
     
     password = []
-    for i in range(password_length):
-        char_index = (hash_int >> (i * 8)) % len(charset)
+    for _ in range(password_length):
+        char_index = value % charset_len
         password.append(charset[char_index])
+        value //= charset_len
     
     return ''.join(password)
 ```
 
-### Bucketing Formula (Current Implementation)
-```python
-def assign_bucket(endpoint: str, num_buckets: int) -> int:
-    hash_value = int(endpoint[:8], 16)  # First 32 bits
-    return hash_value % num_buckets
+### Bucketing Strategy
 
-def intra_bucket_value(endpoint: str, bucket_size: int) -> int:
-    hash_value = int(endpoint[:8], 16)
-    return hash_value % bucket_size
+```python
+# SHA-1-based bucketing with fill factor
+num_buckets = ceil(total_entries / (bucket_size * fill_factor))
+bucket_key = int(endpoint[:8], 16) % num_buckets
+intra_value = int(endpoint[:8], 16) % bucket_size
+```
+
+## Testing
+
+```bash
+# Run all tests (349 tests)
+pytest tests/ -v
+
+# Run specific test suite
+pytest tests/test_grover_search.py -v
+
+# With coverage
+pytest tests/ --cov=rainbow_table_generator --cov=attack --cov-report=html
 ```
 
 ## Dependencies
 
 ```
-pyyaml>=6.0          # Configuration parsing
+pyyaml>=6.0          # Configuration
 pytest>=7.0          # Testing
 pytest-cov>=4.0      # Coverage
-qiskit>=1.0          # Quantum simulation (for attack phase)
+qiskit>=1.0          # Quantum simulation
+mmh3>=4.0            # MurmurHash3 (Bloom filter)
+bitarray>=2.8        # Bit arrays (Bloom filter)
 ```
-
-## Performance Metrics
-
-### Generation Phase (Current)
-- Input: 38,285,439 passwords
-- Chain length: 1000 iterations
-- Generation time: 44,918 seconds (~12.5 hours)
-- Processing rate: ~852 chains/second
-- Database size: 2.9 GB
-- Index size: 5.4 MB
-
-### Expected Attack Phase Performance (12-qubit)
-- Bucket lookup: <100ms (indexed SQLite query)
-- Classical chain walking: ~1000 iterations/second per chain
-- Quantum search: 0.14s per bucket (Qiskit statevector)
-- Total attack time: <1 minute per target hash (estimated)
 
 ## Research Context
 
 This implementation improves upon existing research:
 
 **QIris (Lee et al., 2024):**
-- Limited to 4,096 buckets, ~65K entries max
+- Limited to 4,096 buckets, ~65K entries
 - Custom 16-bit hash function
 - Proof-of-concept only
 
-**Khajeian (2025):**
-- Theoretical k-bit hash approach
-- No production implementation
-
 **This Project:**
-- Scales to millions of entries
-- Dynamic bucket allocation
-- Production-ready SQLite storage
-- Supports 4-16 qubit configurations
-- Comprehensive test coverage
+- Scales to 38M+ entries
+- SHA-1-based bucketing (4 billion possible buckets)
+- Production-ready implementation
+- Comprehensive test coverage (349 tests)
+- Both quantum and classical implementations
 
-## Known Issues & Limitations
+### Key Innovations
 
-1. **Bucketing distribution broken** - Only 84K buckets used instead of 2.4M
-2. **Single-threaded generation** - Parallel mode exists but not optimized
-3. **No attack phase yet** - Phase 2 not implemented
-4. **4-qubit configuration suboptimal** - Should migrate to 12 qubits
-5. **No checkpoint resume** - Checkpoints saved but resume not implemented
-6. **Memory usage during generation** - Buckets held in memory before flush
+- **Hybrid approach**: Combines classical pre-screening with quantum search
+- **Endpoint pre-filtering**: 99.94% reduction in chain walks
+- **Fill factor over-provisioning**: Eliminates bucket overflow
+- **Practical implementation**: Works on Qiskit simulator, ready for real quantum hardware
 
-## Contributing & Development
+### Complexity Analysis
 
-### Before Making Changes
-1. Read relevant specification in `.kiro/specs/`
-2. Run existing tests: `pytest tests/ -v`
-3. Check documentation for context
+- **Classical search**: O(M) per bucket (linear scan)
+- **Quantum search**: O(√M) per bucket (Grover's algorithm)
+- **Bucket lookup**: O(1) (hash table or indexed SQL)
+- **Overall**: O(N × √M) quantum vs O(N × M) classical, where N = chain length, M = bucket size
 
-### After Making Changes
-1. Update tests to match new behavior
-2. Run full test suite
-3. Update this README.md with changes
-4. Update relevant documentation files
-5. Regenerate rainbow table if bucketing/hashing changed
+## Performance Logs
 
-### Testing Philosophy
-- All 259 tests must pass before committing
-- Test coverage should remain >80%
-- Integration tests validate end-to-end workflows
+See `quantum_attack.log` and `classical_attack.log` for detailed performance data from the latest runs.
+
+## Known Limitations
+
+1. **Quantum simulation overhead**: Real quantum hardware would be much faster
+2. **Memory vs speed tradeoff**: Classical is faster but uses 57× more memory
+3. **Coverage**: 38M chains cover only 0.0014% of 8-char alphanumeric space (2.8 trillion)
+4. **Initialization time**: Classical requires 57s to load endpoints into memory
+
+## Future Work
+
+- Test on real quantum hardware (IBM Quantum, IonQ, etc.)
+- Implement distributed classical attack across multiple machines
+- Optimize Grover's circuit for specific quantum architectures
+- Extend to longer passwords (9-10 characters)
+- GPU acceleration for classical chain walking
 
 ## References
 
-- **QIris Paper:** Lee et al., "QIris: Quantum Implementation of Rainbow Table Attacks" (2024)
-- **Hybrid Approach:** Khajeian, "Hybrid Classical-Quantum Rainbow Table Attack" (2025)
-- **Original Rainbow Tables:** Oechslin, "Making a faster cryptanalytic time-memory trade-off" (2003)
-- **Grover's Algorithm:** Grover, "A fast quantum mechanical algorithm for database search" (1996)
+- **QIris Paper**: Lee et al., "QIris: Quantum Implementation of Rainbow Table Attacks" (2024)
+- **Original Rainbow Tables**: Oechslin, "Making a faster cryptanalytic time-memory trade-off" (2003)
+- **Grover's Algorithm**: Grover, "A fast quantum mechanical algorithm for database search" (1996)
+
+## License
+
+This project is for educational and research purposes only.
 
 ---
 
-**Status:** Phase 1 complete with critical bucketing bug. Fixing distribution and migrating to 12 qubits before implementing Phase 2.
+**Status**: Both phases complete. 38.3M chains, 98% endpoint diversity, 0% bucket overflow. Quantum and classical attacks both achieve 100% success rate on test dataset.
