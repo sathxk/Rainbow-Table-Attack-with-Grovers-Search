@@ -19,7 +19,7 @@ class TestConfig:
         
         assert config.hash_algorithm == "md5"
         assert config.chain_length == 1000
-        assert config.qubit_count == 4
+        assert config.qubit_count == 10
         assert config.bucket_size_threshold == 10000
         assert config.max_qubits == 20
         assert config.simulation_shots == 1024
@@ -212,7 +212,7 @@ class TestLoadConfig:
             # All values should be defaults
             assert config.hash_algorithm == "md5"
             assert config.chain_length == 1000
-            assert config.qubit_count == 4
+            assert config.qubit_count == 10
             assert config.bucket_size_threshold == 10000
         finally:
             Path(temp_path).unlink()
@@ -585,7 +585,7 @@ class TestGetDefaultConfig:
         # Verify all default values
         assert config.hash_algorithm == "md5"
         assert config.chain_length == 1000
-        assert config.qubit_count == 4
+        assert config.qubit_count == 10
         assert config.bucket_size_threshold == 10000
         assert config.max_qubits == 20
         assert config.simulation_shots == 1024

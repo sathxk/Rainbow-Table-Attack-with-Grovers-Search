@@ -1,3 +1,6 @@
 pyyaml
 pytest
 pytest-cov
+mmh3
+bitarray
+qiskit

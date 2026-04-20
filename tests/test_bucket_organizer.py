@@ -14,7 +14,7 @@ class TestBucketOrganizer:
         organizer = BucketOrganizer(qubit_count=4, total_entries=1000)
         assert organizer.qubit_count == 4
         assert organizer.bucket_size == 16
-        assert organizer.num_buckets == 63  # ceil(1000 / 16)
+        assert organizer.num_buckets == 84  # ceil(1000 / (16 * 0.75))
         assert len(organizer.buckets) == 0  # Empty initially
     
     def test_initialization_different_qubit_counts(self):
@@ -22,23 +22,23 @@ class TestBucketOrganizer:
         # Test qubit_count=3 -> bucket_size=8
         organizer3 = BucketOrganizer(qubit_count=3, total_entries=1000)
         assert organizer3.bucket_size == 8
-        assert organizer3.num_buckets == 125  # ceil(1000 / 8)
+        assert organizer3.num_buckets == 167  # ceil(1000 / (8 * 0.75))
         
         # Test qubit_count=5 -> bucket_size=32
         organizer5 = BucketOrganizer(qubit_count=5, total_entries=1000)
         assert organizer5.bucket_size == 32
-        assert organizer5.num_buckets == 32  # ceil(1000 / 32)
+        assert organizer5.num_buckets == 42  # ceil(1000 / (32 * 0.75))
         
         # Test qubit_count=6 -> bucket_size=64
         organizer6 = BucketOrganizer(qubit_count=6, total_entries=1000)
         assert organizer6.bucket_size == 64
-        assert organizer6.num_buckets == 16  # ceil(1000 / 64)
+        assert organizer6.num_buckets == 21  # ceil(1000 / (64 * 0.75))
     
     def test_initialization_large_dataset(self):
         """Test BucketOrganizer with large dataset (38M entries)."""
         organizer = BucketOrganizer(qubit_count=4, total_entries=38285441)
         assert organizer.bucket_size == 16
-        assert organizer.num_buckets == 2392841  # ceil(38285441 / 16)
+        assert organizer.num_buckets == 3190454  # ceil(38285441 / (16 * 0.75))
     
     def test_initialization_invalid_qubit_count(self):
         """Test BucketOrganizer initialization with invalid qubit count."""
@@ -63,7 +63,7 @@ class TestBucketOrganizer:
         assert "BucketOrganizer" in repr_str
         assert "qubit_count=4" in repr_str
         assert "bucket_size=16" in repr_str
-        assert "num_buckets=63" in repr_str
+        assert "num_buckets=84" in repr_str
 
 
 class TestAssignBucket:
@@ -420,8 +420,8 @@ class TestBucketAssignmentDistribution:
         """Test distribution with large dataset (38M entries)."""
         organizer = BucketOrganizer(qubit_count=4, total_entries=38285441)
         
-        # With 38M entries and bucket_size=16, should have ~2.4M buckets
-        assert organizer.num_buckets == 2392841
+        # With 38M entries and bucket_size=16, fill_factor=0.75, should have ~3.2M buckets
+        assert organizer.num_buckets == 3190454
         
         # Test a few assignments
         import hashlib

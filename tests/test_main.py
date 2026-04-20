@@ -164,7 +164,7 @@ class TestGenerate:
         assert metadata["hash_algorithm"] == "md5"
         assert metadata["chain_length"] == 10
         assert metadata["qubit_count"] == 2
-        assert metadata["num_buckets"] == 3  # ceil(10 / 4) = 3 buckets
+        assert metadata["num_buckets"] == 4  # ceil(10 / (4 * 0.75)) = 4 buckets
         assert metadata["bucket_size"] == 4  # 2^2 = 4
         assert metadata["password_length"] == 8
         assert metadata["total_chains"] == 10

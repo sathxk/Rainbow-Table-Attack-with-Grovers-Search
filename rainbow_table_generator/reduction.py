@@ -34,26 +34,16 @@ def reduce(hash_value: bytes, iteration: int, password_length: int) -> str:
         >>> all(c in CHARSET for c in pwd)
         True
     """
-    # 4.2.1: Combine hash with iteration index
-    # Convert iteration to bytes and concatenate with hash
-    iteration_bytes = iteration.to_bytes(4, byteorder='big')
-    combined = hash_value + iteration_bytes
-    
-    # 4.2.2: Convert to integer for modulo operations
-    # Convert the combined bytes to a large integer
-    combined_int = int.from_bytes(combined, byteorder='big')
-    
-    # 4.2.3: Generate password by selecting characters from charset
-    # Use modulo operations to select characters from the charset
-    password = []
     charset_len = len(CHARSET)
+    search_space = charset_len ** password_length
+    hash_int = int.from_bytes(hash_value, byteorder='big')
+    value = (hash_int + iteration) % search_space
     
+    password = []
     for _ in range(password_length):
-        # Select character based on current value
-        char_index = combined_int % charset_len
+        char_index = value % charset_len
         password.append(CHARSET[char_index])
-        # Shift to next character position
-        combined_int //= charset_len
+        value //= charset_len
     
     return ''.join(password)
 

@@ -34,7 +34,7 @@ class Config:
         self,
         hash_algorithm: str = "md5",
         chain_length: int = 1000,
-        qubit_count: int = 4,
+        qubit_count: int = 10,
         bucket_size_threshold: int = 10000,
         max_qubits: int = 20,
         simulation_shots: int = 1024,
@@ -43,7 +43,8 @@ class Config:
         checkpoint_interval: int = 100000,
         flush_interval: int = 1000,
         log_level: str = "INFO",
-        max_retries: int = 3
+        max_retries: int = 3,
+        fill_factor: float = 0.75,
     ):
         """
         Initialize Config with provided or default values.
@@ -74,6 +75,12 @@ class Config:
         self.flush_interval = flush_interval
         self.log_level = log_level
         self.max_retries = max_retries
+        self.fill_factor = fill_factor  # bucket over-provisioning (0 < fill_factor <= 1)
+
+        # Derived: num_buckets computed from fill_factor
+        # formula: num_buckets = ceil(total / (bucket_size * fill_factor))
+        # Stored in BucketOrganizer at runtime; exposed here for reference
+        self.password_length = 8  # fixed for this project
     
     def __repr__(self) -> str:
         """Return string representation of Config."""
@@ -81,6 +88,7 @@ class Config:
             f"Config(hash_algorithm={self.hash_algorithm!r}, "
             f"chain_length={self.chain_length}, "
             f"qubit_count={self.qubit_count}, "
+            f"fill_factor={self.fill_factor}, "
             f"bucket_size_threshold={self.bucket_size_threshold}, "
             f"max_qubits={self.max_qubits}, "
             f"simulation_shots={self.simulation_shots}, "
@@ -111,7 +119,8 @@ class Config:
             "checkpoint_interval": self.checkpoint_interval,
             "flush_interval": self.flush_interval,
             "log_level": self.log_level,
-            "max_retries": self.max_retries
+            "max_retries": self.max_retries,
+            "fill_factor": self.fill_factor,
         }
 
 
@@ -175,7 +184,7 @@ def load_config(config_path: str) -> Config:
     return Config(
         hash_algorithm=config_data.get('hash_algorithm', 'md5'),
         chain_length=config_data.get('chain_length', 1000),
-        qubit_count=config_data.get('qubit_count', 4),
+        qubit_count=config_data.get('qubit_count', 10),
         bucket_size_threshold=config_data.get('bucket_size_threshold', 10000),
         max_qubits=config_data.get('max_qubits', 20),
         simulation_shots=config_data.get('simulation_shots', 1024),
@@ -184,7 +193,8 @@ def load_config(config_path: str) -> Config:
         checkpoint_interval=config_data.get('checkpoint_interval', 100000),
         flush_interval=config_data.get('flush_interval', 1000),
         log_level=config_data.get('log_level', 'INFO'),
-        max_retries=config_data.get('max_retries', 3)
+        max_retries=config_data.get('max_retries', 3),
+        fill_factor=config_data.get('fill_factor', 0.75),
     )
 
 

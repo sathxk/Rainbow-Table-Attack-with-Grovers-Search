@@ -1,7 +1,8 @@
 {
   "hash_algorithm": "sha1",
   "chain_length": 1000,
-  "qubit_count": 4,
+  "qubit_count": 10,
+  "fill_factor": 0.75,
   "bucket_size_threshold": 10000,
   "max_qubits": 20,
   "simulation_shots": 1024,

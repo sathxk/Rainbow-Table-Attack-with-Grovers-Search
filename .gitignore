@@ -104,9 +104,11 @@ PCFG/wordset_output/
 PCFG/pcfg_output/
 PCFG/split_output/
 rainbow_tables/
+bloom_filter.bin
+bloom_filter.json
+hashes_deep_test.txt
 
-# Logs
-*.log
+# Logs (keep attack logs for documentation)
 logs/
 
 # Checkpoints

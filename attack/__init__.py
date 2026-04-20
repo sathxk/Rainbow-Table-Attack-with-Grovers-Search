@@ -1,12 +1,34 @@
+"""
+Attack phase package for the Quantum Rainbow Table Attack system.
 
-# Unsupported bytecode in file attack/__pycache__/__init__.cpython-312.pyc
-# Unsupported Python version, 3.12.0, for decompilation
-# decompyle3 version 3.9.3
-# Python bytecode version base 3.12.0 (3531)
-# Decompiled from: Python 3.12.3 (main, Mar  3 2026, 12:15:18) [GCC 13.3.0]
-# Embedded file name: /home/sathvik/Projects/Rainbow Table Attack/RTA Grovers/attack/__init__.py
-# Compiled at: 2026-04-16 18:43:26
-# Size of source mod 2**32: 1187 bytes
+Components:
+    BloomFilter:    EP pre-screening (skips ~99.9% of candidate positions).
+    DummyPadder:    Pads buckets to exactly 2^n for fixed-width quantum circuits.
+    walk_forward:   Rebuild candidate_EP from target_hash at chain position k.
+    BucketLoader:   SQLite wrapper to load chain entries by bucket_key.
+    ChainVerifier:  Classical chain walk to extract the cracked plaintext password.
+    GroverSearch:   Qiskit Grover's algorithm circuit on a padded bucket.
+    RainbowAttack:  Main orchestrator wiring all components together.
 
-Unsupported Python version, 3.12.0, for decompilation
+Usage:
+    from attack import RainbowAttack, BloomFilter
+    from attack.walk_forward import walk_forward
+"""
 
+from attack.bloom_filter import BloomFilter
+from attack.dummy_padding import DummyPadder
+from attack.walk_forward import walk_forward
+from attack.bucket_loader import BucketLoader
+from attack.chain_verifier import ChainVerifier
+from attack.grover_search import GroverSearch
+from attack.orchestrator import RainbowAttack
+
+__all__ = [
+    "BloomFilter",
+    "DummyPadder",
+    "walk_forward",
+    "BucketLoader",
+    "ChainVerifier",
+    "GroverSearch",
+    "RainbowAttack",
+]

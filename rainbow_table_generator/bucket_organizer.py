@@ -32,28 +32,38 @@ class BucketOrganizer:
         buckets:      Dict mapping bucket_key -> list of (SP, EP, intra_value)
     """
 
-    def __init__(self, qubit_count: int, total_entries: int):
+    def __init__(self, qubit_count: int, total_entries: int, fill_factor: float = 0.75):
         """
         Initialize the BucketOrganizer.
 
         Args:
-            qubit_count: Number of qubits N (must be >= 1)
+            qubit_count:   Number of qubits N (must be >= 1)
             total_entries: Total number of entries to be stored
+            fill_factor:   Target occupancy per bucket (0 < fill_factor <= 1).
+                           Over-provisioning (< 1.0) prevents modulo-bias collisions
+                           from pushing any bucket above bucket_size (2^N) entries.
+                           At fill_factor=0.75 the average bucket uses 75% capacity,
+                           leaving a 25% headroom for uneven distribution.
 
         Raises:
-            ValueError: If qubit_count < 1 or total_entries < 1
+            ValueError: If qubit_count < 1, total_entries < 1, or fill_factor invalid
         """
         if qubit_count < 1:
             raise ValueError(f"qubit_count must be positive, got {qubit_count}")
-        
         if total_entries < 1:
             raise ValueError(f"total_entries must be positive, got {total_entries}")
+        if not (0 < fill_factor <= 1.0):
+            raise ValueError(f"fill_factor must be in (0, 1], got {fill_factor}")
 
         self.qubit_count = qubit_count
-        self.bucket_size = 2 ** qubit_count  # entries per bucket
-        
-        # Calculate number of buckets needed
-        self.num_buckets = math.ceil(total_entries / self.bucket_size)
+        self.bucket_size = 2 ** qubit_count  # entries per bucket (Grover's search space)
+        self.fill_factor = fill_factor
+
+        # Over-provision: effective_capacity per bucket = bucket_size * fill_factor
+        # num_buckets = ceil(total / effective_capacity)
+        import math as _math
+        effective_capacity = self.bucket_size * fill_factor
+        self.num_buckets = _math.ceil(total_entries / effective_capacity)
 
         # Dynamic dict: bucket_key -> [(start_point, end_point, intra_value)]
         self.buckets: Dict[int, List[Tuple[str, str, int]]] = {}
