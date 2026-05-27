@@ -110,6 +110,7 @@ hashes_deep_test.txt
 
 # Logs (keep attack logs for documentation)
 logs/
+logs-i7/
 
 # Checkpoints
 checkpoints/

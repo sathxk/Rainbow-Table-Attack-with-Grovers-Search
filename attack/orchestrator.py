@@ -56,6 +56,7 @@ class RainbowAttack:
         db_path: str,
         num_buckets: int,
         bloom_filter: Optional[BloomFilter] = None,
+        use_dega: bool = False,
     ) -> None:
         """
         Args:
@@ -64,10 +65,12 @@ class RainbowAttack:
             num_buckets:  Total buckets in the table (from fix_buckets output,
                           known to be 49851 for the current 10-qubit table).
             bloom_filter: Pre-built BloomFilter (None = disable pre-screening).
+            use_dega:     Use DEGA instead of standard Grover (default: False).
         """
         self.config = config
         self.db_path = db_path
         self.bloom = bloom_filter
+        self.use_dega = use_dega
 
         hash_func = hash_factory(config.hash_algorithm)
         self.padder = DummyPadder(n_qubits=config.qubit_count)
@@ -80,12 +83,24 @@ class RainbowAttack:
             db_path=db_path,
             num_buckets=num_buckets,
         )
-        self.searcher = GroverSearch(
-            n_qubits=config.qubit_count,
-            chain_length=config.chain_length,
-            password_length=config.password_length,
-            hash_func=hash_func,
-        )
+        
+        # Choose quantum search algorithm
+        if use_dega:
+            from DEGA import DEGASearch
+            self.searcher = DEGASearch(
+                n_qubits=config.qubit_count,
+                chain_length=config.chain_length,
+                password_length=config.password_length,
+                hash_func=hash_func,
+            )
+        else:
+            self.searcher = GroverSearch(
+                n_qubits=config.qubit_count,
+                chain_length=config.chain_length,
+                password_length=config.password_length,
+                hash_func=hash_func,
+            )
+        
         self._hash_func = hash_func
 
 
@@ -153,8 +168,10 @@ class RainbowAttack:
         return None
 
     def __repr__(self) -> str:
+        algorithm = "DEGA" if self.use_dega else "Grover"
         return (
             f"RainbowAttack("
+            f"algorithm={algorithm}, "
             f"chain_length={self.config.chain_length}, "
             f"n_qubits={self.config.qubit_count}, "
             f"bloom={'enabled' if self.bloom else 'disabled'})"

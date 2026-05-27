@@ -1,6 +1,7 @@
-pyyaml
-pytest
-pytest-cov
-mmh3
-bitarray
-qiskit
+pyyaml>=6.0
+pytest>=7.0
+pytest-cov>=4.0
+mmh3>=4.0
+bitarray>=2.8
+qiskit>=1.0
+qiskit-aer>=0.13
