@@ -21,26 +21,26 @@ All approaches achieve **100% success rate** on passwords covered by the rainbow
 - **RAM**: 16 GB
 - **Python**: 3.12.3
 
-### Performance Results
+### Performance Results (Test Dataset of size 100)
 
 | Configuration | Total Time | Avg Time/Hash | Throughput | 
 |--------------|-----------|---------------|------------|
 | **DEGA 8-qubit** | **44.926s** | **0.449s** | **2.23 h/s** |
 | **DEGA 10-qubit** | **45.298s** | **0.453s** | **2.21 h/s** |
-| Classical + Bloom | 49.497s | 0.495s | 2.02 h/s |
-| Classical (no Bloom) | 49.899s | 0.499s | 2.00 h/s |
-| Grover 8-qubit | 63.247s | 0.632s | 1.58 h/s |
 | DEGA 12-qubit | 64.528s | 0.645s | 1.55 h/s |
 | DEGA 14-qubit | 79.729s | 0.797s | 1.25 h/s |
 | DEGA 16-qubit | 117.810s | 1.178s | 0.85 h/s |
+| Classical + Bloom | 49.497s | 0.495s | 2.02 h/s |
+| Classical (no Bloom) | 49.899s | 0.499s | 2.00 h/s |
+| Grover 8-qubit | 63.247s | 0.632s | 1.58 h/s |
 | Grover 10-qubit | 166.897s | 1.669s | 0.60 h/s |
 
-**Key Findings:**
+<!-- **Key Findings:**
 - **DEGA 8-qubit is fastest overall** — faster than Classical Bloom and all Grover variants
 - **DEGA 8-qubit and 10-qubit are statistically tied** (difference within system variance)
 - **All approaches achieve 100% success rate** on covered passwords, except DEGA 12-qubit (59/60)
 - **All approaches correctly identify uncovered passwords** (40/40 "NOT FOUND")
-- **DEGA scales well up to 14 qubits** — beyond that, classical oracle overhead dominates
+- **DEGA scales well up to 14 qubits** — beyond that, classical oracle overhead dominates -->
 
 ### DEGA vs Standard Grover
 
