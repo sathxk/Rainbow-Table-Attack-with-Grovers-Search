@@ -103,6 +103,48 @@ class RainbowAttack:
         
         self._hash_func = hash_func
 
+    def _query_endpoint(self, candidate_ep: str, conn=None) -> Optional[str]:
+        """
+        Query DB directly for a chain by its endpoint hash.
+
+        Args:
+            candidate_ep: The endpoint hash to look up.
+            conn:         Optional existing sqlite3.Connection to reuse.
+                          If None, a short-lived connection is opened and closed.
+        """
+        import sqlite3
+        own_conn = conn is None
+        if own_conn:
+            conn = sqlite3.connect(self.db_path)
+        try:
+            # Leverage bucket_key index to avoid full table scans if end_point index is missing
+            bucket_key = int(candidate_ep[:8], 16) % self.loader.num_buckets
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT start_point FROM chains WHERE bucket_key = ? AND end_point = ? LIMIT 1",
+                (bucket_key, candidate_ep)
+            )
+            result = cursor.fetchone()
+            return result[0] if result else None
+        finally:
+            if own_conn:
+                conn.close()
+
+    def _walk_to_final_password(self, start_point: str) -> str:
+        """
+        Walk all chain_length hash-reduce steps from start_point and return
+        the final password pwd_L such that H(pwd_L) == stored endpoint.
+
+        This is needed when the target hash IS the stored endpoint hash (EP),
+        because EP = H(pwd_L) sits one step PAST position chain_length-1.
+        """
+        from rainbow_table_generator.reduction import reduce
+        current = start_point
+        for k in range(self.config.chain_length):
+            current_hash = self._hash_func.hash(current)
+            current = reduce(current_hash, k, self.config.password_length)
+        return current  # pwd_L
+
 
     def crack(
         self,
@@ -119,6 +161,22 @@ class RainbowAttack:
         Returns:
             Plaintext password, or None if not found in the table.
         """
+        # ── Special case: target_hash might BE the stored endpoint hash ──
+        # EP = H(pwd_L) lives one step past position chain_length-1 and is
+        # NEVER produced as a candidate by walk_forward(), so the main loop
+        # below can never find it.
+        #
+        # This check runs BEFORE opening the BucketLoader so endpoint hashes
+        # bypass all quantum overhead (no loader, no Grover/DEGA circuit).
+        if self.bloom and self.bloom.possibly_exists(target_hash_hex):
+            start_point = self._query_endpoint(target_hash_hex)
+            if start_point:
+                pwd_L = self._walk_to_final_password(start_point)
+                if self._hash_func.hash(pwd_L).hex() == target_hash_hex:
+                    if verbose:
+                        print(f"[EP] CRACKED via direct endpoint lookup! Password = {pwd_L!r}")
+                    return pwd_L
+
         with self.loader:
             for k in range(self.config.chain_length - 1, -1, -1):
 

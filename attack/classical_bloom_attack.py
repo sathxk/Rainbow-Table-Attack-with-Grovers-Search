@@ -43,7 +43,7 @@ class ClassicalBloomAttack:
         self,
         config: Config,
         db_path: str,
-        num_buckets: int,  # Kept for compatibility but not used
+        num_buckets: int,
         bloom_filter: BloomFilter
     ):
         """
@@ -52,11 +52,12 @@ class ClassicalBloomAttack:
         Args:
             config:       Configuration object
             db_path:      Path to rainbow table database
-            num_buckets:  Not used (kept for API compatibility)
+            num_buckets:  Total buckets (used for index lookup optimization)
             bloom_filter: Pre-built Bloom filter for endpoint screening
         """
         self.config = config
         self.db_path = db_path
+        self.num_buckets = num_buckets
         self.bloom = bloom_filter
         self.hash_func = hash_factory(config.hash_algorithm)
         self.conn = None
@@ -97,12 +98,29 @@ class ClassicalBloomAttack:
                 )
         return None
 
+    def _walk_to_final_password(self, start_point: str) -> str:
+        """
+        Walk all chain_length hash-reduce steps from start_point and return
+        the final password pwd_L such that H(pwd_L) == stored endpoint.
+
+        This is needed when the target hash IS the stored endpoint hash (EP),
+        because EP = H(pwd_L) sits one step PAST position chain_length-1.
+        """
+        current = start_point
+        for k in range(self.config.chain_length):
+            current_hash = self.hash_func.hash_hex(current)
+            current = reduce(
+                bytes.fromhex(current_hash),
+                iteration=k,
+                password_length=self.config.password_length
+            )
+        return current  # pwd_L: the password whose hash is the stored EP
+
     def _query_endpoint(self, candidate_ep: str) -> Optional[str]:
         """
         Query database directly for a specific endpoint.
         
-        Traditional rainbow table approach: direct lookup by endpoint.
-        No bucketing needed - that's quantum-specific.
+        Leverages the bucket_key index to avoid full table scans.
 
         Args:
             candidate_ep: Endpoint to search for
@@ -110,10 +128,11 @@ class ClassicalBloomAttack:
         Returns:
             Start point if found, None otherwise
         """
+        bucket_key = int(candidate_ep[:8], 16) % self.num_buckets
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT start_point FROM chains WHERE end_point = ? LIMIT 1",
-            (candidate_ep,)
+            "SELECT start_point FROM chains WHERE bucket_key = ? AND end_point = ? LIMIT 1",
+            (bucket_key, candidate_ep)
         )
         result = cursor.fetchone()
         return result[0] if result else None
@@ -134,8 +153,21 @@ class ClassicalBloomAttack:
 
         # Open database connection
         self.conn = sqlite3.connect(self.db_path)
-        
+
         try:
+            # ── Special case: target_hash might BE the stored endpoint hash ──
+            # EP = H(pwd_L) lives one step past position chain_length-1 and is
+            # never produced as a candidate by _compute_candidate_endpoint().
+            # Handle it with a direct DB lookup before the main loop.
+            if self.bloom.possibly_exists(target_hash):
+                start_point = self._query_endpoint(target_hash)
+                if start_point:
+                    # Walk the full chain to recover pwd_L (the password whose
+                    # hash is the stored endpoint).
+                    pwd_L = self._walk_to_final_password(start_point)
+                    if self.hash_func.hash_hex(pwd_L) == target_hash:
+                        return pwd_L
+
             for k in range(self.config.chain_length - 1, -1, -1):
                 candidate_ep = self._compute_candidate_endpoint(target_hash, k)
 
